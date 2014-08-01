@@ -1,6 +1,8 @@
 require "httpi/adapter/httpclient"
 require "httpi/adapter/curb"
 require "httpi/adapter/net_http"
+require 'net/ntlm'
+require 'kconv'
 
 module HTTPI
 

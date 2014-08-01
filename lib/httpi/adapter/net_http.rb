@@ -1,5 +1,5 @@
-require "uri"
-require "httpi/response"
+require 'uri'
+require 'httpi/response'
 
 module HTTPI
   module Adapter
@@ -63,7 +63,7 @@ module HTTPI
       attr_writer :client
 
       def new_client(request)
-        proxy_url = request.proxy || URI("")
+        proxy_url = request.proxy || URI('')
         proxy = Net::HTTP::Proxy(proxy_url.host, proxy_url.port, proxy_url.user, proxy_url.password)
         proxy.new request.url.host, request.url.port
       end
@@ -71,6 +71,23 @@ module HTTPI
       def do_request(type, request)
         setup_client request
         setup_ssl_auth request.auth.ssl if request.auth.ssl?
+
+        if request.auth.ntlm?
+          # first yield request is to authenticate (exchange secret and auth)...
+          t1 = Net::NTLM::Message::Type1.new
+          request.headers['Authorization'] = "NTLM #{t1.encode64}"
+          resp = respond_with(client.start do |http|
+            yield(http, request_client(:head, request))
+          end)
+
+          if resp.headers['WWW-Authenticate'] =~ /(NTLM|Negotiate) (.+)/
+            msg = $2
+            t2 = Net::NTLM::Message.decode64(msg)
+            t3 = t2.response({:user => request.auth.ntlm[0], :password => request.auth.ntlm[1]}, {:ntlmv2 => true})
+            request.headers['Authorization'] = "NTLM #{t3.encode64}"
+          end
+          # second yield request below is made with the authorization.
+        end
 
         respond_with(client.start do |http|
           yield http, request_client(type, request)
